@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: kronos-scheduler
+    env: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: PORT
+        sync: false
+      - key: DB_PATH
+        value: /var/data/scheduler.db
+    disk:
+      name: kronos-db-vol
+      mountPath: /var/data
+      sizeGB: 1

@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KRONOS | Stateful Job Scheduler Sandbox (10k+ RPS)</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Confetti CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <link rel="stylesheet" href="index.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="logo-area">
+        <i class="fa-solid fa-bolt logo-icon"></i>
+        <div>
+          <h1>KRONOS SYSTEM</h1>
+          <span class="subtitle">STATEFUL HIGH-THROUGHPUT SCHEDULER</span>
+        </div>
+      </div>
+      <div class="header-status">
+        <button class="theme-toggle-btn" id="theme-toggle-btn" onclick="toggleTheme()" title="Toggle Light/Dark Theme">
+          <i class="fa-solid fa-moon"></i>
+        </button>
+        <span class="status-indicator-pill" id="val-broker-status">
+          <span class="ping-dot"></span>
+          BROKER RUNNING
+        </span>
+        <div class="clock-display" id="clock">00:00:00</div>
+      </div>
+    </header>
+
+    <!-- Welcome & Pipeline Flow -->
+    <section class="glass-card welcome-card">
+      <div class="welcome-header">
+        <div class="welcome-title">
+          <h2>High-Throughput Stateful Sandbox</h2>
+          <p class="welcome-desc">
+            An ultra-high performance partitioned job scheduling engine handling over <strong>10,000+ operations/sec</strong>. 
+            Experience dynamic SLA auto-scaling, buffered SQLite database writes in WAL mode, and stateful memory partitions.
+          </p>
+        </div>
+        <div class="welcome-controls">
+          <button class="primary-sim-btn stopped" id="master-sim-btn" onclick="toggleSimulation()">
+            <i class="fa-solid fa-play"></i> START PIPELINE SIMULATOR
+          </button>
+        </div>
+      </div>
+
+      <!-- Horizontal Pipeline Flow Map -->
+      <div class="pipeline-flow-container" id="pipeline-map">
+        <div class="pipeline-stage active" id="stage-generator">
+          <div class="stage-icon"><i class="fa-solid fa-gauge-high"></i></div>
+          <div class="stage-info">
+            <h4>1. Traffic Generator</h4>
+            <p>Produces simulated jobs</p>
+            <span class="stage-badge" id="badge-generator">0 RPS</span>
+          </div>
+        </div>
+        
+        <div class="pipeline-connector" id="connector-1">
+          <div class="connector-line"></div>
+          <div class="connector-pulse"></div>
+        </div>
+
+        <div class="pipeline-stage" id="stage-ingestion">
+          <div class="stage-icon"><i class="fa-solid fa-share-nodes"></i></div>
+          <div class="stage-info">
+            <h4>2. Partition Broker</h4>
+            <p>16 hashed memory lanes</p>
+            <span class="stage-badge" id="badge-ingestion">0 Pending</span>
+          </div>
+        </div>
+
+        <div class="pipeline-connector" id="connector-2">
+          <div class="connector-line"></div>
+          <div class="connector-pulse"></div>
+        </div>
+
+        <div class="pipeline-stage" id="stage-workers">
+          <div class="stage-icon"><i class="fa-solid fa-users"></i></div>
+          <div class="stage-info">
+            <h4>3. Consumer Workers</h4>
+            <p>Polled parallel batches</p>
+            <span class="stage-badge" id="badge-workers">0 Active</span>
+          </div>
+        </div>
+
+        <div class="pipeline-connector" id="connector-3">
+          <div class="connector-line"></div>
+          <div class="connector-pulse"></div>
+        </div>
+
+        <div class="pipeline-stage" id="stage-sqlite">
+          <div class="stage-icon"><i class="fa-solid fa-database"></i></div>
+          <div class="stage-info">
+            <h4>4. SQLite WAL Store</h4>
+            <p>Buffered bulk commits</p>
+            <span class="stage-badge" id="badge-sqlite">0 Persisted</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Main Grid -->
+    <main class="dashboard-grid">
+      
+      <!-- Telemetry Column Left (Primary Gauges & Breakdown) -->
+      <section class="metrics-summary-container">
+        
+        <div class="glass-card stat-card" id="ingest-card">
+          <div class="stat-icon"><i class="fa-solid fa-cloud-arrow-down"></i></div>
+          <div class="stat-content">
+            <h3>INGESTION RATE</h3>
+            <div class="stat-value" id="val-ingest-rps">0 <span class="unit">RPS</span></div>
+            <p class="stat-trend"><i class="fa-solid fa-arrow-trend-up"></i> Total Ingested: <span id="val-total-ingested">0</span></p>
+          </div>
+        </div>
+
+        <div class="glass-card stat-card" id="process-card">
+          <div class="stat-icon"><i class="fa-solid fa-gears"></i></div>
+          <div class="stat-content">
+            <h3>PROCESSING RATE</h3>
+            <div class="stat-value" id="val-process-rps">0 <span class="unit">RPS</span></div>
+            <p class="stat-trend"><i class="fa-solid fa-circle-check"></i> Total Processed: <span id="val-total-processed">0</span></p>
+          </div>
+        </div>
+
+        <div class="glass-card stat-card" id="sla-card">
+          <div class="stat-icon"><i class="fa-solid fa-stopwatch"></i></div>
+          <div class="stat-content">
+            <h3>AVG TOTAL LATENCY</h3>
+            <div class="stat-value" id="val-avg-latency">0 <span class="unit">ms</span></div>
+            <p class="stat-trend"><i class="fa-solid fa-gauge-high"></i> P99 SLA: <span id="val-p99-latency">0 ms</span></p>
+          </div>
+        </div>
+
+        <!-- Latency SLA Ring Indicator -->
+        <div class="glass-card latency-sla-ring-card">
+          <h3>SLA TARGET BUFFER</h3>
+          <div class="sla-ring-container">
+            <svg width="140" height="140" viewBox="0 0 140 140">
+              <circle cx="70" cy="70" r="55" class="ring-bg" />
+              <circle cx="70" cy="70" r="55" class="ring-fg" id="sla-progress" />
+            </svg>
+            <div class="sla-ring-label">
+              <span id="sla-pct">100%</span>
+              <small id="val-sla-badge-label">SUB-3.0s SLA</small>
+            </div>
+          </div>
+          <div class="sla-status-badge" id="val-autoscale-status">SLA GUARD: DISABLED</div>
+        </div>
+
+        <!-- Job Type Throughput Breakdown Card -->
+        <div class="glass-card job-types-card">
+          <div class="card-header-simple">
+            <h3><i class="fa-solid fa-tags header-icon text-emerald"></i> JOB TYPE BREAKDOWN</h3>
+          </div>
+          <div class="job-types-list">
+            <div class="type-item">
+              <div class="type-header">
+                <span class="type-name">Transaction</span>
+                <span class="type-count" id="type-count-transaction">0</span>
+              </div>
+              <div class="progress-bar-container">
+                <div class="progress-bar-fill" id="type-bar-transaction" style="width: 0%;"></div>
+              </div>
+            </div>
+            <div class="type-item">
+              <div class="type-header">
+                <span class="type-name">Authentication</span>
+                <span class="type-count" id="type-count-auth">0</span>
+              </div>
+              <div class="progress-bar-container">
+                <div class="progress-bar-fill" id="type-bar-auth" style="width: 0%;"></div>
+              </div>
+            </div>
+            <div class="type-item">
+              <div class="type-header">
+                <span class="type-name">Notification</span>
+                <span class="type-count" id="type-count-notification">0</span>
+              </div>
+              <div class="progress-bar-container">
+                <div class="progress-bar-fill" id="type-bar-notification" style="width: 0%;"></div>
+              </div>
+            </div>
+            <div class="type-item">
+              <div class="type-header">
+                <span class="type-name">System Cleanup</span>
+                <span class="type-count" id="type-count-cleanup">0</span>
+              </div>
+              <div class="progress-bar-container">
+                <div class="progress-bar-fill" id="type-bar-cleanup" style="width: 0%;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- Central Operations & Visualization (Charts & Kafka Partitions) -->
+      <section class="central-ops-column">
+        
+        <!-- Live Chart Card -->
+        <div class="glass-card chart-card">
+          <div class="card-header">
+            <h3><i class="fa-solid fa-chart-line header-icon text-blue"></i> THROUGHPUT TELEMETRY</h3>
+            <span class="live-tag">LIVE</span>
+          </div>
+          <div class="chart-wrapper">
+            <canvas id="throughputChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Partitions Map Card -->
+        <div class="glass-card partitions-card">
+          <div class="card-header">
+            <h3><i class="fa-solid fa-network-wired header-icon text-purple"></i> BROKER QUEUE PARTITIONS</h3>
+            <span class="active-count"><span id="val-active-partitions">16</span> Allocations</span>
+          </div>
+          
+          <div class="partitions-grid" id="partitions-map">
+            <!-- Dynamically populated 16 partitions -->
+          </div>
+          
+          <div class="partitions-legend">
+            <span><span class="legend-color idle"></span> Idle (0)</span>
+            <span><span class="legend-color active"></span> Working (1-499)</span>
+            <span><span class="legend-color backed-up"></span> Congested (500+)</span>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- Right Column: SQLite Database & Controls -->
+      <section class="controls-column">
+        
+        <!-- SQLite WAL Status Card -->
+        <div class="glass-card db-card">
+          <div class="card-header">
+            <h3><i class="fa-solid fa-database header-icon text-emerald"></i> SQLite WAL STORAGE</h3>
+          </div>
+          <div class="db-stats-grid">
+            <div class="db-stat-item">
+              <span class="label">INSERT RATE</span>
+              <span class="value" id="db-insert-rate">0 RPS</span>
+            </div>
+            <div class="db-stat-item">
+              <span class="label">TRANSACTION BUFFER</span>
+              <span class="value" id="db-pending-buffer">0 / 1000</span>
+            </div>
+            <div class="db-stat-item">
+              <span class="label">PERSISTED RECORDS</span>
+              <span class="value" id="db-total-records">0</span>
+            </div>
+            <div class="db-stat-item">
+              <span class="label">FILE SIZE</span>
+              <span class="value" id="db-file-size">0.00 MB</span>
+            </div>
+          </div>
+          <div class="db-mode-indicator">
+            <span class="pill-badge"><i class="fa-solid fa-bolt text-emerald"></i> JOURNAL WAL</span>
+            <span class="pill-badge"><i class="fa-solid fa-shuffle text-blue"></i> SYNC NORMAL</span>
+          </div>
+        </div>
+
+        <!-- Deployment Readiness Card -->
+        <div class="glass-card deploy-readiness-card">
+          <div class="card-header-simple">
+            <h3><i class="fa-solid fa-server header-icon text-emerald"></i> DEPLOYMENT READINESS</h3>
+          </div>
+          <ul class="readiness-list">
+            <li>
+              <span class="status-dot green"></span>
+              <div>
+                <strong>Stateful Broker Process</strong>
+                <p>Process queues memory successfully allocated.</p>
+              </div>
+            </li>
+            <li>
+              <span class="status-dot green"></span>
+              <div>
+                <strong>WebSocket Full-Duplex</strong>
+                <p>Live metrics communication channel is active.</p>
+              </div>
+            </li>
+            <li>
+              <span class="status-dot yellow" id="readiness-db-dot"></span>
+              <div>
+                <strong>Persistent Mount Volume</strong>
+                <p id="readiness-db-text">Requires stateful storage mount for database writes.</p>
+              </div>
+            </li>
+            <li>
+              <span class="status-dot yellow" id="readiness-daemon-dot"></span>
+              <div>
+                <strong>Process PM2 Daemon</strong>
+                <p id="readiness-daemon-text">Configure PM2 clustering config for container restarts.</p>
+              </div>
+            </li>
+          </ul>
+        </div>
+
+        <!-- System Controller panel -->
+        <div class="glass-card control-panel-card">
+          <div class="card-header">
+            <h3><i class="fa-solid fa-sliders header-icon text-gold"></i> CONTROL DESK</h3>
+          </div>
+
+          <div class="control-elements">
+            
+            <!-- Pause Toggle -->
+            <div class="control-row inline">
+              <label for="pause-toggle">
+                <strong>PAUSE JOB INGESTION</strong>
+                <small>Halt producer pipeline queues</small>
+              </label>
+              <button class="toggle-btn" id="pause-toggle" onclick="togglePause()">
+                <i class="fa-solid fa-play"></i> ACTIVE
+              </button>
+            </div>
+
+            <!-- SLA Auto-scale Toggle -->
+            <div class="control-row inline">
+              <label for="autoscale-toggle">
+                <strong>SLA AUTO-SCALE GUARD</strong>
+                <small>Autocontrol consumer threads</small>
+              </label>
+              <button class="toggle-btn" id="autoscale-toggle" onclick="toggleAutoScale()">
+                <i class="fa-solid fa-shield-halved"></i> DISABLED
+              </button>
+            </div>
+
+            <!-- SLA Target Limit select -->
+            <div class="control-row inline">
+              <label for="sla-threshold-select">
+                <strong>SLA TARGET THRESHOLD</strong>
+                <small>Set dynamic latency limits</small>
+              </label>
+              <select id="sla-threshold-select" class="theme-select" onchange="updateSlaThreshold(this.value)">
+                <option value="500">500 ms (Tight)</option>
+                <option value="1500">1500 ms (Medium)</option>
+                <option value="3000" selected>3000 ms (Standard)</option>
+              </select>
+            </div>
+
+            <!-- Simulated Traffic Rate (Simulated RPS) -->
+            <div class="control-row" id="traffic-generator-row">
+              <div class="slider-header">
+                <label for="generator-slider"><strong>SIMULATED TRAFFIC RATE</strong></label>
+                <span class="slider-badge" id="generator-count-badge">10,000 RPS</span>
+              </div>
+              <input type="range" id="generator-slider" min="100" max="15000" step="100" value="10000" oninput="updateGeneratorRps(this.value)">
+              <div class="slider-labels">
+                <span>100 RPS</span>
+                <span>15,000 RPS</span>
+              </div>
+            </div>
+
+            <!-- Worker scaling slider -->
+            <div class="control-row">
+              <div class="slider-header">
+                <label for="worker-slider"><strong>WORKER SCALING POOL</strong></label>
+                <span class="slider-badge" id="worker-count-badge">8 / 8 Active</span>
+              </div>
+              <input type="range" id="worker-slider" min="1" max="32" value="8" oninput="updateWorkerScale(this.value)">
+              <div class="slider-labels">
+                <span>1 Worker</span>
+                <span>32 Workers</span>
+              </div>
+            </div>
+
+            <!-- Artificial Network Latency slider -->
+            <div class="control-row">
+              <div class="slider-header">
+                <label for="lag-slider"><strong>SIMULATED NETWORK JITTER</strong></label>
+                <span class="slider-badge" id="lag-count-badge">0 ms</span>
+              </div>
+              <input type="range" id="lag-slider" min="0" max="1000" step="50" value="0" oninput="updateNetworkLag(this.value)">
+              <div class="slider-labels">
+                <span>0ms (No Jitter)</span>
+                <span>1,000ms Latency</span>
+              </div>
+            </div>
+
+            <!-- Database management actions -->
+            <div class="control-row actions">
+              <button class="action-btn danger" onclick="purgeDatabaseAction()">
+                <i class="fa-solid fa-trash-can"></i> PURGE SQLITE DB
+              </button>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Interactive Sandbox Guides -->
+        <div class="glass-card instructions-card">
+          <h3><i class="fa-solid fa-circle-question header-icon text-blue"></i> INTERACTIVE SANDBOX EXPERIMENTS</h3>
+          <ul class="step-guide">
+            <li>
+              <span>1</span>
+              <div>
+                <strong>Scale to 10k RPS</strong>
+                <p>Click <strong>Start Pipeline Simulator</strong>. Dynamic telemetry charts will soar. SQLite persists thousands of jobs efficiently using WAL bulk transactions.</p>
+              </div>
+            </li>
+            <li>
+              <span>2</span>
+              <div>
+                <strong>Trigger Auto-Scaling</strong>
+                <p>Set <strong>Network Jitter</strong> to 400ms. Ingest latencies will spike. Enable <strong>SLA Auto-Scale Guard</strong> and watch the workers scale up to 24 to clear the lane backlog!</p>
+              </div>
+            </li>
+            <li>
+              <span>3</span>
+              <div>
+                <strong>Observe Backpressure</strong>
+                <p>While simulation is running, click <strong>Pause Job Ingestion</strong>. The generator freezes, and workers rapidly drain the remaining partition queues to 0.</p>
+              </div>
+            </li>
+          </ul>
+        </div>
+
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Real-time telemetry dashboard client-side coordinator -->
+  <script>
+    // Theme Management (Supports Persistent Light/Dark Mode Swaps)
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+
+    // Constants
+    const host = window.location.host || 'localhost:3000';
+    const WS_URL = `ws://${host}/ws`;
+    let ws = null;
+    let chart = null;
+
+    // Charts settings
+    const MAX_CHART_POINTS = 30;
+    const chartLabels = Array.from({ length: MAX_CHART_POINTS }, () => '');
+    const ingestData = Array.from({ length: MAX_CHART_POINTS }, () => 0);
+    const processData = Array.from({ length: MAX_CHART_POINTS }, () => 0);
+
+    // Initialize Page
+    window.addEventListener('DOMContentLoaded', () => {
+      initTheme();
+      initChart();
+      initPartitions();
+      connectWebSocket();
+      initClock();
+    });
+
+    function initTheme() {
+      const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+      const btn = document.getElementById('theme-toggle-btn');
+      if (btn) {
+        btn.innerHTML = currentTheme === 'dark' 
+          ? '<i class="fa-solid fa-sun"></i>' 
+          : '<i class="fa-solid fa-moon"></i>';
+      }
+    }
+
+    function toggleTheme() {
+      const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+      const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', newTheme);
+      localStorage.setItem('theme', newTheme);
+      
+      const btn = document.getElementById('theme-toggle-btn');
+      if (btn) {
+        btn.innerHTML = newTheme === 'dark' 
+          ? '<i class="fa-solid fa-sun"></i>' 
+          : '<i class="fa-solid fa-moon"></i>';
+      }
+      
+      // Dynamically update Chart.js colors based on active theme
+      if (chart) {
+        const isDark = newTheme === 'dark';
+        chart.options.scales.y.grid.color = isDark ? '#2d2d2a' : '#e5e2db';
+        chart.options.scales.y.ticks.color = isDark ? '#a8a39a' : '#5c5650';
+        chart.options.plugins.legend.labels.color = isDark ? '#a8a39a' : '#5c5650';
+        chart.update('none'); // redraw immediately
+      }
+    }
+
+    function initClock() {
+      setInterval(() => {
+        const d = new Date();
+        document.getElementById('clock').innerText = d.toTimeString().split(' ')[0];
+      }, 1000);
+    }
+
+    function initChart() {
+      const ctx = document.getElementById('throughputChart').getContext('2d');
+      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: chartLabels,
+          datasets: [
+            {
+              label: 'INGESTED RPS',
+              data: ingestData,
+              borderColor: '#cc5a37',
+              backgroundColor: 'rgba(204, 90, 55, 0.015)',
+              borderWidth: 2,
+              tension: 0.35,
+              fill: true,
+              pointRadius: 0
+            },
+            {
+              label: 'PROCESSED RPS',
+              data: processData,
+              borderColor: '#2d6a4f',
+              backgroundColor: 'rgba(45, 106, 79, 0.01)',
+              borderWidth: 2,
+              tension: 0.35,
+              fill: true,
+              pointRadius: 0
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: true,
+              labels: {
+                color: isDark ? '#a8a39a' : '#5c5650',
+                font: { family: 'Outfit', size: 11, weight: 500 }
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: { display: false }
+            },
+            y: {
+              grid: { color: isDark ? '#2d2d2a' : '#e5e2db' },
+              ticks: {
+                color: isDark ? '#a8a39a' : '#5c5650',
+                font: { family: 'JetBrains Mono', size: 10 }
+              },
+              min: 0
+            }
+          }
+        }
+      });
+    }
+
+    function initPartitions() {
+      const grid = document.getElementById('partitions-map');
+      grid.innerHTML = '';
+      for (let i = 0; i < 16; i++) {
+        const item = document.createElement('div');
+        item.className = 'partition-box idle';
+        item.id = `partition-${i}`;
+        item.innerHTML = `
+          <span class="part-number">${i}</span>
+          <span class="part-backlog" id="part-backlog-${i}">0</span>
+        `;
+        grid.appendChild(item);
+      }
+    }
+
+    let targetWorkers = 8;
+    let isPaused = false;
+    let lagMs = 0;
+    let isAutoScale = false;
+    let confettiFired = false;
+    let isSimulationRunning = false;
+    let currentGeneratorRps = 10000;
+    let currentSlaThresholdMs = 3000;
+
+    function connectWebSocket() {
+      ws = new WebSocket(WS_URL);
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        updateDashboard(data);
+      };
+
+      ws.onclose = () => {
+        setTimeout(connectWebSocket, 2000);
+      };
+    }
+
+    function updateDashboard(data) {
+      // Telemetry Cards
+      document.getElementById('val-ingest-rps').innerHTML = `${data.ingestRps.toLocaleString()} <span class="unit">RPS</span>`;
+      document.getElementById('val-total-ingested').innerText = data.totalIngested.toLocaleString();
+
+      document.getElementById('val-process-rps').innerHTML = `${data.processRps.toLocaleString()} <span class="unit">RPS</span>`;
+      document.getElementById('val-total-processed').innerText = data.totalProcessed.toLocaleString();
+
+      // Confetti celebrations at 100k benchmarks
+      if (data.totalProcessed >= 100000 && !confettiFired) {
+        confettiFired = true;
+        confetti({
+          particleCount: 100,
+          spread: 60,
+          origin: { y: 0.6 }
+        });
+      }
+
+      // Latencies Color SLA threshold rules
+      const avgLat = data.avgLatency;
+      const avgLatCard = document.getElementById('sla-card');
+      const avgLatVal = document.getElementById('val-avg-latency');
+      
+      avgLatVal.innerHTML = `${avgLat.toLocaleString()} <span class="unit">ms</span>`;
+      document.getElementById('val-p99-latency').innerText = `${data.p99Latency.toLocaleString()} ms`;
+
+      // Minimal colors: Sub SLA (Standard), Borderline, Breached
+      avgLatCard.className = 'glass-card stat-card';
+      const breachThreshold = data.slaThresholdMs || 3000;
+      if (avgLat > breachThreshold * 0.8) {
+        avgLatCard.classList.add('stat-danger');
+      } else if (avgLat > breachThreshold * 0.4) {
+        avgLatCard.classList.add('stat-warn');
+      } else {
+        avgLatCard.classList.add('stat-normal');
+      }
+
+      // Compute SLA Success Percentage
+      let slaPct = 100;
+      if (data.p99Latency > breachThreshold) {
+        slaPct = Math.max(0, Math.round(100 - ((data.p99Latency - breachThreshold) / 10)));
+      } else if (data.avgLatency > breachThreshold * 0.5) {
+        slaPct = 99;
+      }
+      
+      document.getElementById('sla-pct').innerText = `${slaPct}%`;
+      
+      // Update circular SLA gauge
+      const circle = document.getElementById('sla-progress');
+      const radius = 55;
+      const circumference = 2 * Math.PI * radius;
+      const strokeDashoffset = circumference - (slaPct / 100) * circumference;
+      circle.style.strokeDasharray = circumference;
+      circle.style.strokeDashoffset = strokeDashoffset;
+      
+      if (slaPct >= 99) {
+        circle.style.stroke = '#2d6a4f'; 
+      } else if (slaPct >= 90) {
+        circle.style.stroke = '#b27d14'; 
+      } else {
+        circle.style.stroke = '#b33939'; 
+      }
+
+      // SQLite WAL Engine metrics
+      document.getElementById('db-insert-rate').innerText = `${data.db.insertRate.toLocaleString()} RPS`;
+      document.getElementById('db-pending-buffer').innerText = `${data.db.pendingWrites.toLocaleString()} / 1000`;
+      document.getElementById('db-total-records').innerText = data.db.totalJobsInDb.toLocaleString();
+      document.getElementById('db-file-size').innerText = `${data.db.dbSizeMB} MB`;
+
+      // Update Chart telemetry datasets
+      ingestData.push(data.ingestRps);
+      processData.push(data.processRps);
+
+      if (ingestData.length > MAX_CHART_POINTS) ingestData.shift();
+      if (processData.length > MAX_CHART_POINTS) processData.shift();
+
+      chart.update('none');
+
+      // Partitions map grid updating
+      const partitions = data.partitions || [];
+      let totalPending = 0;
+      partitions.forEach((count, i) => {
+        totalPending += count;
+        const box = document.getElementById(`partition-${i}`);
+        const text = document.getElementById(`part-backlog-${i}`);
+        
+        if (box && text) {
+          text.innerText = count.toLocaleString();
+          
+          box.className = 'partition-box';
+          if (count === 0) {
+            box.classList.add('idle');
+          } else if (count < 500) {
+            box.classList.add('active');
+          } else {
+            box.classList.add('backed-up');
+          }
+        }
+      });
+
+      // Synchronize dashboard switches to actual server settings
+      if (data.isBrokerPaused !== isPaused) {
+        isPaused = data.isBrokerPaused;
+        const btn = document.getElementById('pause-toggle');
+        const brokerStatusPill = document.getElementById('val-broker-status');
+        if (isPaused) {
+          btn.className = 'toggle-btn paused';
+          btn.innerHTML = '<i class="fa-solid fa-pause"></i> PAUSED';
+          brokerStatusPill.className = 'status-indicator-pill paused';
+          brokerStatusPill.innerHTML = '<span class="ping-dot"></span> BROKER PAUSED';
+        } else {
+          btn.className = 'toggle-btn';
+          btn.innerHTML = '<i class="fa-solid fa-play"></i> ACTIVE';
+          brokerStatusPill.className = 'status-indicator-pill';
+          brokerStatusPill.innerHTML = '<span class="ping-dot"></span> BROKER RUNNING';
+        }
+      }
+
+      if (data.isAutoScaleEnabled !== isAutoScale) {
+        isAutoScale = data.isAutoScaleEnabled;
+        const autoScaleBtn = document.getElementById('autoscale-toggle');
+        if (isAutoScale) {
+          autoScaleBtn.className = 'toggle-btn autoscale-active';
+          autoScaleBtn.innerHTML = '<i class="fa-solid fa-shield-halved"></i> ENABLED';
+        } else {
+          autoScaleBtn.className = 'toggle-btn';
+          autoScaleBtn.innerHTML = '<i class="fa-solid fa-shield-halved"></i> DISABLED';
+        }
+      }
+      
+      const statusText = document.getElementById('val-autoscale-status');
+      if (statusText) {
+        statusText.innerText = `SLA GUARD: ${data.autoScaleStatus}`;
+        statusText.className = `sla-status-badge ${data.autoScaleStatus.toLowerCase()}`;
+      }
+
+      if (data.maxWorkerCount !== targetWorkers) {
+        targetWorkers = data.maxWorkerCount;
+        document.getElementById('worker-slider').value = targetWorkers;
+      }
+      document.getElementById('worker-count-badge').innerText = `${data.activeWorkers} / ${targetWorkers} Active`;
+
+      if (data.simulateNetworkLag !== lagMs) {
+        lagMs = data.simulateNetworkLag;
+        document.getElementById('lag-slider').value = lagMs;
+      }
+      document.getElementById('lag-count-badge').innerText = `${lagMs} ms`;
+
+      // Simulation States sync
+      if (data.isSimulationRunning !== isSimulationRunning) {
+        isSimulationRunning = data.isSimulationRunning;
+        const masterSimBtn = document.getElementById('master-sim-btn');
+        const pipelineMap = document.getElementById('pipeline-map');
+        
+        if (isSimulationRunning) {
+          masterSimBtn.className = 'primary-sim-btn running';
+          masterSimBtn.innerHTML = '<i class="fa-solid fa-stop"></i> STOP PIPELINE SIMULATOR';
+          pipelineMap.classList.add('simulation-active');
+        } else {
+          masterSimBtn.className = 'primary-sim-btn stopped';
+          masterSimBtn.innerHTML = '<i class="fa-solid fa-play"></i> START PIPELINE SIMULATOR';
+          pipelineMap.classList.remove('simulation-active');
+        }
+      }
+
+      if (data.generatorRps !== currentGeneratorRps) {
+        currentGeneratorRps = data.generatorRps;
+        document.getElementById('generator-slider').value = currentGeneratorRps;
+      }
+      document.getElementById('generator-count-badge').innerText = `${currentGeneratorRps.toLocaleString()} RPS`;
+
+      if (data.slaThresholdMs !== currentSlaThresholdMs) {
+        currentSlaThresholdMs = data.slaThresholdMs;
+        document.getElementById('sla-threshold-select').value = currentSlaThresholdMs;
+        document.getElementById('val-sla-badge-label').innerText = `SUB-${(currentSlaThresholdMs / 1000).toFixed(1)}s SLA`;
+      }
+
+      // Job Type Telemetry counts and ratios
+      const types = ['transaction', 'auth', 'notification', 'cleanup'];
+      const counts = data.jobTypeCounters || { transaction: 0, auth: 0, notification: 0, cleanup: 0 };
+      const totalTypeJobs = types.reduce((acc, t) => acc + (counts[t] || 0), 0);
+
+      types.forEach(t => {
+        const countVal = counts[t] || 0;
+        document.getElementById(`type-count-${t}`).innerText = countVal.toLocaleString();
+        
+        const bar = document.getElementById(`type-bar-${t}`);
+        if (bar) {
+          const ratio = totalTypeJobs > 0 ? Math.round((countVal / totalTypeJobs) * 100) : 0;
+          bar.style.width = `${ratio}%`;
+        }
+      });
+
+      // Update Flow diagram details in real time
+      document.getElementById('badge-generator').innerText = isSimulationRunning ? `${currentGeneratorRps.toLocaleString()} RPS` : 'Inactive';
+      document.getElementById('badge-ingestion').innerText = `${totalPending.toLocaleString()} Pending`;
+      document.getElementById('badge-workers').innerText = `${data.activeWorkers} Workers`;
+      document.getElementById('badge-sqlite').innerText = `${data.db.totalJobsInDb.toLocaleString()} Persisted`;
+
+      // Flow diagram visual stages class activation
+      toggleStageActive('stage-generator', isSimulationRunning && !isPaused);
+      toggleStageActive('stage-ingestion', totalPending > 0);
+      toggleStageActive('stage-workers', data.activeWorkers > 0 && totalPending > 0);
+      toggleStageActive('stage-sqlite', data.db.insertRate > 0);
+
+      // Deployment Readiness audit check live updating
+      const dbDot = document.getElementById('readiness-db-dot');
+      const dbText = document.getElementById('readiness-db-text');
+      const daemonDot = document.getElementById('readiness-daemon-dot');
+      const daemonText = document.getElementById('readiness-daemon-text');
+
+      if (data.db.totalJobsInDb > 0) {
+        dbDot.className = 'status-dot green';
+        dbText.innerHTML = `Persistent Mounted File (Volume Capacity: ${data.db.dbSizeMB} MB Audited).`;
+      } else {
+        dbDot.className = 'status-dot yellow';
+        dbText.innerText = 'Requires stateful storage mount for database writes.';
+      }
+
+      if (data.isSimulationRunning) {
+        daemonDot.className = 'status-dot green';
+        daemonText.innerText = 'Process runs on persistent stateful event framework successfully.';
+      } else {
+        daemonDot.className = 'status-dot yellow';
+        daemonText.innerText = 'Configure PM2 clustering config for container restarts.';
+      }
+    }
+
+    function toggleStageActive(stageId, isActive) {
+      const stage = document.getElementById(stageId);
+      if (stage) {
+        if (isActive) {
+          stage.classList.add('active');
+        } else {
+          stage.classList.remove('active');
+        }
+      }
+    }
+
+    // Interactive desk actions
+    async function postControl(action, value) {
+      try {
+        const apiHost = window.location.host ? '' : 'http://localhost:3000';
+        await fetch(`${apiHost}/api/control`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action, value })
+        });
+      } catch (err) {
+        console.error('Failed to post controls:', err);
+      }
+    }
+
+    function toggleSimulation() {
+      const masterSimBtn = document.getElementById('master-sim-btn');
+      if (isSimulationRunning) {
+        isSimulationRunning = false;
+        masterSimBtn.className = 'primary-sim-btn stopped';
+        masterSimBtn.innerHTML = '<i class="fa-solid fa-play"></i> START PIPELINE SIMULATOR';
+        document.getElementById('pipeline-map').classList.remove('simulation-active');
+        postControl('stop_simulation', true);
+      } else {
+        isSimulationRunning = true;
+        masterSimBtn.className = 'primary-sim-btn running';
+        masterSimBtn.innerHTML = '<i class="fa-solid fa-stop"></i> STOP PIPELINE SIMULATOR';
+        document.getElementById('pipeline-map').classList.add('simulation-active');
+        postControl('start_simulation', true);
+        confettiFired = false;
+      }
+    }
+
+    function togglePause() {
+      isPaused = !isPaused;
+      const btn = document.getElementById('pause-toggle');
+      if (isPaused) {
+        btn.className = 'toggle-btn paused';
+        btn.innerHTML = '<i class="fa-solid fa-pause"></i> PAUSED';
+      } else {
+        btn.className = 'toggle-btn';
+        btn.innerHTML = '<i class="fa-solid fa-play"></i> ACTIVE';
+      }
+      postControl('pause', isPaused);
+    }
+
+    function toggleAutoScale() {
+      isAutoScale = !isAutoScale;
+      const btn = document.getElementById('autoscale-toggle');
+      if (isAutoScale) {
+        btn.className = 'toggle-btn autoscale-active';
+        btn.innerHTML = '<i class="fa-solid fa-shield-halved"></i> ENABLED';
+      } else {
+        btn.className = 'toggle-btn';
+        btn.innerHTML = '<i class="fa-solid fa-shield-halved"></i> DISABLED';
+      }
+      postControl('set_autoscale', isAutoScale);
+    }
+
+    function updateWorkerScale(val) {
+      targetWorkers = parseInt(val, 10);
+      document.getElementById('worker-count-badge').innerText = `Scaling... ${targetWorkers}`;
+      postControl('set_workers', targetWorkers);
+    }
+
+    function updateGeneratorRps(val) {
+      currentGeneratorRps = parseInt(val, 10);
+      document.getElementById('generator-count-badge').innerText = `${currentGeneratorRps.toLocaleString()} RPS`;
+      postControl('set_generator_rps', currentGeneratorRps);
+    }
+
+    function updateNetworkLag(val) {
+      lagMs = parseInt(val, 10);
+      document.getElementById('lag-count-badge').innerText = `${lagMs} ms`;
+      postControl('set_lag', lagMs);
+    }
+
+    function updateSlaThreshold(val) {
+      currentSlaThresholdMs = parseInt(val, 10);
+      document.getElementById('val-sla-badge-label').innerText = `SUB-${(currentSlaThresholdMs / 1000).toFixed(1)}s SLA`;
+      postControl('set_sla_threshold', currentSlaThresholdMs);
+    }
+
+    async function purgeDatabaseAction() {
+      if (confirm('Are you sure you want to purge all records in SQLite? This will empty the visual history.')) {
+        await postControl('purge', true);
+        confettiFired = false;
+      }
+    }
+  </script>
+</body>
+</html>
