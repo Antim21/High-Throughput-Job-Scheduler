@@ -56,6 +56,31 @@
         </div>
       </div>
 
+      <!-- Architecture Explainer Panel -->
+      <div class="architecture-explainer-panel">
+        <div class="explainer-column">
+          <div class="explainer-icon"><i class="fa-solid fa-network-wired"></i></div>
+          <div class="explainer-text">
+            <strong>16 Hashed Partitions</strong>
+            <p>Jobs are consistently hashed by ID into 16 independent memory lanes (like Apache Kafka). This guarantees order-of-arrival execution per partition and isolates backpressure.</p>
+          </div>
+        </div>
+        <div class="explainer-column">
+          <div class="explainer-icon"><i class="fa-solid fa-users-gear"></i></div>
+          <div class="explainer-text">
+            <strong>Parallel Workers & SLA scaling</strong>
+            <p>Consumer workers pull batches from assigned partitions. The SLA Guard dynamically increases worker threads (8 to 24) to keep processing latencies below your SLA target buffer.</p>
+          </div>
+        </div>
+        <div class="explainer-column">
+          <div class="explainer-icon"><i class="fa-solid fa-database"></i></div>
+          <div class="explainer-text">
+            <strong>SQLite WAL Bulk Commits</strong>
+            <p>Processed jobs are queued and committed using asynchronous bulk transactions in Write-Ahead Log (WAL) mode. This avoids locking database tables and boosts disk write capacity.</p>
+          </div>
+        </div>
+      </div>
+
       <!-- Horizontal Pipeline Flow Map -->
       <div class="pipeline-flow-container" id="pipeline-map">
         <div class="pipeline-stage active" id="stage-generator">
