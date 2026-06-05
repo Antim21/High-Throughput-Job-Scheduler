@@ -145,7 +145,6 @@ export default async function handler(req, res) {
         job.total_latency = Math.max(0, job.completed_at - job.created_at);
 
         state.latencyHistory.push(job.total_latency);
-        if (state.latencyHistory.length > 5000) state.latencyHistory.shift();
 
         const typeKey = job.type || 'transaction';
         if (state.jobTypeCounters[typeKey] !== undefined) state.jobTypeCounters[typeKey]++;
@@ -153,6 +152,10 @@ export default async function handler(req, res) {
 
         broker.totalProcessed++;
         queueJobWrite(job);
+      }
+
+      if (state.latencyHistory.length > 5000) {
+        state.latencyHistory = state.latencyHistory.slice(-5000);
       }
 
       return sendJSON(res, 200, { success: true });
@@ -192,7 +195,7 @@ export default async function handler(req, res) {
           runSimulationStep(deltaMs);
 
           telemetryTickCounter++;
-          if (telemetryTickCounter >= 5) {
+          if (telemetryTickCounter >= 2) {
             telemetryTickCounter = 0;
             const snapshot = buildTelemetrySnapshot();
             res.write(`data: ${JSON.stringify(snapshot)}\n\n`);

@@ -15,7 +15,7 @@ let isBrokerPaused = false;
 let isSimulationRunning = false;
 let targetGeneratorRps = 10000;
 let isInternalWorkersRunning = false;
-let inFlightJobs = [];
+let inFlightBatches = [];
 const workerBusyUntil = new Map();
 
 // ─── SLA & Telemetry ───
@@ -156,35 +156,47 @@ function stopInternalWorkers() {
 function runSimulationStep(deltaMs) {
   const now = Date.now();
 
-  // 1. Process completed in-flight jobs
-  const completedJobs = [];
-  const remainingInFlight = [];
+  // 1. Process completed in-flight batches
+  const completedBatches = [];
+  const remainingBatches = [];
   
-  for (const job of inFlightJobs) {
-    if (job.completionTime <= now) {
-      completedJobs.push(job);
+  for (const batch of inFlightBatches) {
+    if (batch.completionTime <= now) {
+      completedBatches.push(batch);
     } else {
-      remainingInFlight.push(job);
+      remainingBatches.push(batch);
     }
   }
-  inFlightJobs = remainingInFlight;
+  inFlightBatches = remainingBatches;
 
-  for (const job of completedJobs) {
-    job.status = 'completed';
-    job.completed_at = job.completionTime;
-    job.ingest_latency = Math.max(0, job.started_at - job.created_at);
-    job.execution_latency = Math.max(0, job.completed_at - job.started_at);
-    job.total_latency = Math.max(0, job.completed_at - job.created_at);
+  let latencyAddedCount = 0;
+  for (const batch of completedBatches) {
+    const commitTime = batch.completionTime;
+    const started_at = batch.started_at;
 
-    latencyHistory.push(job.total_latency);
-    if (latencyHistory.length > LATENCY_WINDOW_SIZE) latencyHistory.shift();
+    for (const job of batch.jobs) {
+      job.status = 'completed';
+      job.started_at = started_at;
+      job.completed_at = commitTime;
+      job.ingest_latency = Math.max(0, job.started_at - job.created_at);
+      job.execution_latency = Math.max(0, job.completed_at - job.started_at);
+      job.total_latency = Math.max(0, job.completed_at - job.created_at);
 
-    const typeKey = job.type || 'transaction';
-    if (jobTypeCounters[typeKey] !== undefined) jobTypeCounters[typeKey]++;
-    else jobTypeCounters.transaction++;
+      latencyHistory.push(job.total_latency);
+      latencyAddedCount++;
 
-    broker.totalProcessed++;
-    queueJobWrite(job);
+      const typeKey = job.type || 'transaction';
+      if (jobTypeCounters[typeKey] !== undefined) jobTypeCounters[typeKey]++;
+      else jobTypeCounters.transaction++;
+
+      broker.totalProcessed++;
+      queueJobWrite(job);
+    }
+  }
+
+  // Cap latencyHistory window efficiently using slice
+  if (latencyAddedCount > 0 && latencyHistory.length > LATENCY_WINDOW_SIZE) {
+    latencyHistory = latencyHistory.slice(-LATENCY_WINDOW_SIZE);
   }
 
   if (!isSimulationRunning) return;
@@ -246,11 +258,12 @@ function runSimulationStep(deltaMs) {
       // Mark worker as busy
       workerBusyUntil.set(workerId, completionTime);
 
-      for (const job of jobs) {
-        job.started_at = now;
-        job.completionTime = completionTime;
-        inFlightJobs.push(job);
-      }
+      // Group into a single batch object
+      inFlightBatches.push({
+        completionTime,
+        started_at: now,
+        jobs,
+      });
     }
   }
 }
@@ -381,7 +394,7 @@ function handleControl(action, value) {
       broker.totalProcessed = 0;
       latencyHistory = [];
       jobTypeCounters = { transaction: 0, auth: 0, notification: 0, cleanup: 0 };
-      inFlightJobs = [];
+      inFlightBatches = [];
       workerBusyUntil.clear();
       break;
     default:
