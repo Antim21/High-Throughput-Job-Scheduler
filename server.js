@@ -382,20 +382,8 @@ app.post('/api/control', async (request, reply) => {
   });
 });
 
-// Initialize HTTP and WebSocket servers
-const server = app.server;
+// Initialize WebSocket server (noServer mode — we'll wire up upgrade after listen)
 const wss = new WebSocketServer({ noServer: true });
-
-// Attach WS server upgrade
-server.on('upgrade', (request, socket, head) => {
-  if (request.url === '/ws') {
-    wss.handleUpgrade(request, socket, head, (ws) => {
-      wss.emit('connection', ws, request);
-    });
-  } else {
-    socket.destroy();
-  }
-});
 
 // Dashboard Telemetry Calculations
 
@@ -596,5 +584,18 @@ app.listen({ port: PORT, host: '0.0.0.0' }, (err, address) => {
     console.error(err);
     process.exit(1);
   }
+
+  // Attach WebSocket upgrade handler AFTER the server is listening
+  const server = app.server;
+  server.on('upgrade', (request, socket, head) => {
+    if (request.url === '/ws') {
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit('connection', ws, request);
+      });
+    } else {
+      socket.destroy();
+    }
+  });
+
   console.log(`Ingestion API & Broker Server listening on ${address}`);
 });

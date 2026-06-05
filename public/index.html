@@ -446,7 +446,9 @@
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const WS_URL = `${wsProtocol}//${host}/ws`;
     let ws = null;
+    let eventSource = null;
     let chart = null;
+    let usingSSE = false;
 
     // Charts settings
     const MAX_CHART_POINTS = 30;
@@ -459,7 +461,7 @@
       initTheme();
       initChart();
       initPartitions();
-      connectWebSocket();
+      connectRealtime();
       initClock();
     });
 
@@ -588,16 +590,65 @@
     let currentGeneratorRps = 10000;
     let currentSlaThresholdMs = 3000;
 
-    function connectWebSocket() {
-      ws = new WebSocket(WS_URL);
+    function connectRealtime() {
+      // Try WebSocket first (works on local dev with full Fastify server)
+      try {
+        ws = new WebSocket(WS_URL);
+        
+        ws.onopen = () => {
+          console.log('[Kronos] Connected via WebSocket');
+          usingSSE = false;
+        };
 
-      ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        updateDashboard(data);
+        ws.onmessage = (event) => {
+          const data = JSON.parse(event.data);
+          updateDashboard(data);
+        };
+
+        ws.onerror = () => {
+          // WebSocket failed — likely on Vercel, fall back to SSE
+          ws.close();
+          connectSSE();
+        };
+
+        ws.onclose = (event) => {
+          if (!usingSSE) {
+            // Retry WebSocket after a delay (local dev server restart)
+            setTimeout(connectRealtime, 2000);
+          }
+        };
+      } catch {
+        // WebSocket constructor failed, go straight to SSE
+        connectSSE();
+      }
+    }
+
+    function connectSSE() {
+      if (eventSource) {
+        eventSource.close();
+      }
+      usingSSE = true;
+      console.log('[Kronos] Connecting via SSE fallback...');
+      
+      const sseUrl = `${window.location.origin}/api/sse`;
+      eventSource = new EventSource(sseUrl);
+
+      eventSource.onopen = () => {
+        console.log('[Kronos] Connected via SSE');
       };
 
-      ws.onclose = () => {
-        setTimeout(connectWebSocket, 2000);
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          updateDashboard(data);
+        } catch (err) {
+          // Ignore parse errors from SSE comments
+        }
+      };
+
+      eventSource.onerror = () => {
+        // SSE auto-reconnects, but log the error
+        console.log('[Kronos] SSE connection interrupted, reconnecting...');
       };
     }
 
