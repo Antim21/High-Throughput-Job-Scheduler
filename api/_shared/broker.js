@@ -15,6 +15,8 @@ let isBrokerPaused = false;
 let isSimulationRunning = false;
 let targetGeneratorRps = 10000;
 let isInternalWorkersRunning = false;
+let inFlightJobs = [];
+const workerBusyUntil = new Map();
 
 // ─── SLA & Telemetry ───
 let slaThresholdMs = 3000;
@@ -152,18 +154,49 @@ function stopInternalWorkers() {
 
 // ─── Run Simulation Step (driven by active connection tick) ───
 function runSimulationStep(deltaMs) {
+  const now = Date.now();
+
+  // 1. Process completed in-flight jobs
+  const completedJobs = [];
+  const remainingInFlight = [];
+  
+  for (const job of inFlightJobs) {
+    if (job.completionTime <= now) {
+      completedJobs.push(job);
+    } else {
+      remainingInFlight.push(job);
+    }
+  }
+  inFlightJobs = remainingInFlight;
+
+  for (const job of completedJobs) {
+    job.status = 'completed';
+    job.completed_at = job.completionTime;
+    job.ingest_latency = Math.max(0, job.started_at - job.created_at);
+    job.execution_latency = Math.max(0, job.completed_at - job.started_at);
+    job.total_latency = Math.max(0, job.completed_at - job.created_at);
+
+    latencyHistory.push(job.total_latency);
+    if (latencyHistory.length > LATENCY_WINDOW_SIZE) latencyHistory.shift();
+
+    const typeKey = job.type || 'transaction';
+    if (jobTypeCounters[typeKey] !== undefined) jobTypeCounters[typeKey]++;
+    else jobTypeCounters.transaction++;
+
+    broker.totalProcessed++;
+    queueJobWrite(job);
+  }
+
   if (!isSimulationRunning) return;
 
-  // 1. Ingest simulated traffic
+  // 2. Ingest simulated traffic
   if (!isBrokerPaused) {
     const jobsPerInterval = (targetGeneratorRps * deltaMs) / 1000;
-    // Handle fractional jobs accurately via random rounding
     const integerJobs = Math.floor(jobsPerInterval);
     const fractionalRemainder = jobsPerInterval - integerJobs;
     const extraJob = Math.random() < fractionalRemainder ? 1 : 0;
     const finalJobsCount = integerJobs + extraJob;
 
-    const now = Date.now();
     for (let i = 0; i < finalJobsCount; i++) {
       const rand = Math.random();
       let jobType = 'transaction';
@@ -187,39 +220,36 @@ function runSimulationStep(deltaMs) {
     }
   }
 
-  // 2. Consume jobs using simulated worker threads
+  // 3. Consume jobs using simulated worker threads
   if (isInternalWorkersRunning) {
     const count = maxWorkerCount;
     for (let i = 0; i < count; i++) {
       const workerId = `internal-worker-${i}`;
       broker.registerWorker(workerId);
-      
-      // Scale batch size to match the time slice (approx 250 jobs per 100ms)
-      const batchSize = Math.max(1, Math.round(250 * (deltaMs / 100)));
+
+      // Check if worker is busy
+      const busyUntil = workerBusyUntil.get(workerId) || 0;
+      if (now < busyUntil) {
+        continue; // Worker is still processing previous batch
+      }
+
+      // Worker is free! Poll jobs
+      const batchSize = 250;
       const jobs = broker.poll(workerId, batchSize);
       if (jobs.length === 0) continue;
 
-      const now = Date.now();
-      const workDelay = 5 + Math.floor(Math.random() * 15);
-      const commitTime = now + workDelay;
+      // Calculate latency & delay
+      const workDelay = 5 + Math.floor(Math.random() * 15); // 5-20ms
+      const totalDelay = workDelay + simulateNetworkLag;
+      const completionTime = now + totalDelay;
+
+      // Mark worker as busy
+      workerBusyUntil.set(workerId, completionTime);
 
       for (const job of jobs) {
-        job.status = 'completed';
         job.started_at = now;
-        job.completed_at = commitTime;
-        job.ingest_latency = Math.max(0, job.started_at - job.created_at);
-        job.execution_latency = Math.max(0, job.completed_at - job.started_at);
-        job.total_latency = Math.max(0, job.completed_at - job.created_at);
-
-        latencyHistory.push(job.total_latency);
-        if (latencyHistory.length > LATENCY_WINDOW_SIZE) latencyHistory.shift();
-
-        const typeKey = job.type || 'transaction';
-        if (jobTypeCounters[typeKey] !== undefined) jobTypeCounters[typeKey]++;
-        else jobTypeCounters.transaction++;
-
-        broker.totalProcessed++;
-        queueJobWrite(job);
+        job.completionTime = completionTime;
+        inFlightJobs.push(job);
       }
     }
   }
@@ -351,6 +381,8 @@ function handleControl(action, value) {
       broker.totalProcessed = 0;
       latencyHistory = [];
       jobTypeCounters = { transaction: 0, auth: 0, notification: 0, cleanup: 0 };
+      inFlightJobs = [];
+      workerBusyUntil.clear();
       break;
     default:
       return null;
