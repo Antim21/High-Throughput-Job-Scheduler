@@ -371,7 +371,7 @@ body, .glass-card, .pipeline-stage, .stage-icon, .stat-icon, .toggle-btn, .theme
 /* Dashboard Grid System */
 .dashboard-grid {
   display: grid;
-  grid-template-columns: 280px 1fr 300px;
+  grid-template-columns: 310px 1fr 330px;
   gap: 20px;
 }
 
@@ -1118,56 +1118,56 @@ input[type="range"]::-webkit-slider-thumb:hover {
   background: var(--bg-card-hover);
 }
 
-/* Custom Text Size Upscaling (Claude Font-Legibility Tuning) */
-.app-header h1 { font-size: 18px; }
-.subtitle { font-size: 11px; }
-.clock-display { font-size: 14px; }
-.status-indicator-pill { font-size: 12px; }
+/* Custom Text Size Upscaling (Claude Font-Legibility Tuning - scaled up by ~15-20%) */
+.app-header h1 { font-size: 20px; }
+.subtitle { font-size: 13px; }
+.clock-display { font-size: 16px; }
+.status-indicator-pill { font-size: 14px; }
 
-.welcome-title h2 { font-size: 21px; }
-.welcome-desc { font-size: 14.5px; }
-.primary-sim-btn { font-size: 13.5px; }
+.welcome-title h2 { font-size: 24px; }
+.welcome-desc { font-size: 16px; }
+.primary-sim-btn { font-size: 15px; }
 
-.stage-info h4 { font-size: 14px; }
-.stage-info p { font-size: 11px; }
-.stage-badge { font-size: 11px; }
+.stage-info h4 { font-size: 16px; }
+.stage-info p { font-size: 13px; }
+.stage-badge { font-size: 13px; }
 
-.stat-content h3 { font-size: 11.5px; }
-.stat-value { font-size: 23px; }
-.stat-trend { font-size: 11px; }
-.sla-ring-label span { font-size: 22px; }
-.sla-ring-label small { font-size: 9.5px; }
-.sla-status-badge { font-size: 11px; }
+.stat-content h3 { font-size: 13px; }
+.stat-value { font-size: 26px; }
+.stat-trend { font-size: 13px; }
+.sla-ring-label span { font-size: 25px; }
+.sla-ring-label small { font-size: 11px; }
+.sla-status-badge { font-size: 13px; }
 
-.card-header-simple h3, .card-header h3 { font-size: 13px; }
-.active-count { font-size: 10.5px; }
-.part-number { font-size: 9px; }
-.part-backlog { font-size: 12.5px; }
-.partitions-legend { font-size: 11.5px; }
+.card-header-simple h3, .card-header h3 { font-size: 15px; }
+.active-count { font-size: 12px; }
+.part-number { font-size: 11px; }
+.part-backlog { font-size: 14.5px; }
+.partitions-legend { font-size: 13px; }
 
-.db-stat-item .label { font-size: 9.5px; }
-.db-stat-item .value { font-size: 14.5px; }
-.pill-badge { font-size: 9.5px; }
+.db-stat-item .label { font-size: 11px; }
+.db-stat-item .value { font-size: 16px; }
+.pill-badge { font-size: 11px; }
 
-.readiness-list li { font-size: 12.5px; }
-.readiness-list li p { font-size: 11px; }
+.readiness-list li { font-size: 14px; }
+.readiness-list li p { font-size: 13px; }
 
-.control-row label strong { font-size: 12.5px; }
-.control-row label small { font-size: 10px; }
-.theme-select { font-size: 11.5px; }
-.slider-badge { font-size: 10.5px; }
-.slider-labels { font-size: 9px; }
+.control-row label strong { font-size: 14px; }
+.control-row label small { font-size: 12px; }
+.theme-select { font-size: 13px; }
+.slider-badge { font-size: 12px; }
+.slider-labels { font-size: 11px; }
 
-.toggle-btn { font-size: 11.5px; }
-.action-btn { font-size: 11.5px; }
+.toggle-btn { font-size: 13px; }
+.action-btn { font-size: 13px; }
 
-.type-header { font-size: 12.5px; }
+.type-header { font-size: 14px; }
 
-.step-guide li span { font-size: 10.5px; }
-.step-guide li strong { font-size: 12.5px; }
-.step-guide li p { font-size: 11.5px; }
+.step-guide li span { font-size: 12px; }
+.step-guide li strong { font-size: 14px; }
+.step-guide li p { font-size: 13px; }
 
-.theme-toggle-btn { font-size: 13px; width: 30px; height: 30px; }
+.theme-toggle-btn { font-size: 15px; width: 34px; height: 34px; }
 
 /* Engine Architecture Explainer Banner */
 .architecture-explainer-panel {
@@ -1187,14 +1187,14 @@ input[type="range"]::-webkit-slider-thumb:hover {
 }
 
 .explainer-icon {
-  font-size: 16px;
+  font-size: 18px;
   color: var(--sys-blue);
   margin-top: 2px;
 }
 
 .explainer-text strong {
   display: block;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
   color: var(--text-primary);
   margin-bottom: 2px;
@@ -1203,7 +1203,7 @@ input[type="range"]::-webkit-slider-thumb:hover {
 }
 
 .explainer-text p {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--text-secondary);
   line-height: 1.4;
 }
