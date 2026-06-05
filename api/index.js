@@ -12,6 +12,8 @@ import {
   workerHeartbeats,
   queueJobWrite,
   getState,
+  runSimulationStep,
+  buildTelemetrySnapshot,
 } from './_shared/broker.js';
 
 function parseBody(req) {
@@ -163,6 +165,52 @@ export default async function handler(req, res) {
       broker.registerWorker(workerId);
       const state = getState();
       return sendJSON(res, 200, { success: true, maxWorkerCount: state.maxWorkerCount });
+    }
+
+    // ─── GET /api/sse ───
+    if (path === '/api/sse' && req.method === 'GET') {
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache, no-transform',
+        Connection: 'keep-alive',
+        'Access-Control-Allow-Origin': '*',
+        'X-Accel-Buffering': 'no',
+      });
+
+      res.write(':ok\n\n');
+
+      let lastTickTime = Date.now();
+      let telemetryTickCounter = 0;
+
+      const intervalId = setInterval(() => {
+        try {
+          const now = Date.now();
+          const deltaMs = now - lastTickTime;
+          lastTickTime = now;
+
+          // Drive simulation step for the elapsed ms
+          runSimulationStep(deltaMs);
+
+          telemetryTickCounter++;
+          if (telemetryTickCounter >= 5) {
+            telemetryTickCounter = 0;
+            const snapshot = buildTelemetrySnapshot();
+            res.write(`data: ${JSON.stringify(snapshot)}\n\n`);
+          }
+        } catch (err) {
+          clearInterval(intervalId);
+        }
+      }, 100);
+
+      req.on('close', () => {
+        clearInterval(intervalId);
+      });
+
+      req.on('error', () => {
+        clearInterval(intervalId);
+      });
+
+      return;
     }
 
     // ─── 404 ───

@@ -3,7 +3,6 @@
   "buildCommand": "",
   "outputDirectory": "public",
   "rewrites": [
-    { "source": "/api/sse", "destination": "/api/sse" },
     { "source": "/api/(.*)", "destination": "/api/index" }
   ],
   "headers": [

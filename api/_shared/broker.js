@@ -14,8 +14,6 @@ let isBrokerPaused = false;
 // ─── Simulator State ───
 let isSimulationRunning = false;
 let targetGeneratorRps = 10000;
-let trafficGeneratorInterval = null;
-let internalWorkersInterval = null;
 let isInternalWorkersRunning = false;
 
 // ─── SLA & Telemetry ───
@@ -136,15 +134,37 @@ function calculatePercentiles(arr) {
 
 // ─── Internal Traffic Generator ───
 function startInternalTrafficGenerator() {
-  stopInternalTrafficGenerator();
   isSimulationRunning = true;
-  const intervalMs = 50;
+}
 
-  trafficGeneratorInterval = setInterval(() => {
-    if (isBrokerPaused || !isSimulationRunning) return;
-    const jobsPerInterval = Math.round(targetGeneratorRps / (1000 / intervalMs));
+function stopInternalTrafficGenerator() {
+  isSimulationRunning = false;
+}
+
+// ─── Internal Workers ───
+function startInternalWorkers() {
+  isInternalWorkersRunning = true;
+}
+
+function stopInternalWorkers() {
+  isInternalWorkersRunning = false;
+}
+
+// ─── Run Simulation Step (driven by active connection tick) ───
+function runSimulationStep(deltaMs) {
+  if (!isSimulationRunning) return;
+
+  // 1. Ingest simulated traffic
+  if (!isBrokerPaused) {
+    const jobsPerInterval = (targetGeneratorRps * deltaMs) / 1000;
+    // Handle fractional jobs accurately via random rounding
+    const integerJobs = Math.floor(jobsPerInterval);
+    const fractionalRemainder = jobsPerInterval - integerJobs;
+    const extraJob = Math.random() < fractionalRemainder ? 1 : 0;
+    const finalJobsCount = integerJobs + extraJob;
+
     const now = Date.now();
-    for (let i = 0; i < jobsPerInterval; i++) {
+    for (let i = 0; i < finalJobsCount; i++) {
       const rand = Math.random();
       let jobType = 'transaction';
       if (rand > 0.9) jobType = 'cleanup';
@@ -165,63 +185,43 @@ function startInternalTrafficGenerator() {
         total_latency: 0,
       });
     }
-  }, intervalMs);
-}
-
-function stopInternalTrafficGenerator() {
-  if (trafficGeneratorInterval) {
-    clearInterval(trafficGeneratorInterval);
-    trafficGeneratorInterval = null;
   }
-}
 
-// ─── Internal Workers ───
-function startInternalWorkers() {
-  stopInternalWorkers();
-  isInternalWorkersRunning = true;
-
-  internalWorkersInterval = setInterval(() => {
-    if (!isInternalWorkersRunning) return;
+  // 2. Consume jobs using simulated worker threads
+  if (isInternalWorkersRunning) {
     const count = maxWorkerCount;
     for (let i = 0; i < count; i++) {
       const workerId = `internal-worker-${i}`;
       broker.registerWorker(workerId);
-      const jobs = broker.poll(workerId, 250);
+      
+      // Scale batch size to match the time slice (approx 250 jobs per 100ms)
+      const batchSize = Math.max(1, Math.round(250 * (deltaMs / 100)));
+      const jobs = broker.poll(workerId, batchSize);
       if (jobs.length === 0) continue;
 
       const now = Date.now();
       const workDelay = 5 + Math.floor(Math.random() * 15);
-      setTimeout(() => {
-        if (!isInternalWorkersRunning) return;
-        const commitTime = Date.now();
-        for (const job of jobs) {
-          job.status = 'completed';
-          job.started_at = now;
-          job.completed_at = commitTime;
-          job.ingest_latency = Math.max(0, job.started_at - job.created_at);
-          job.execution_latency = Math.max(0, job.completed_at - job.started_at);
-          job.total_latency = Math.max(0, job.completed_at - job.created_at);
+      const commitTime = now + workDelay;
 
-          latencyHistory.push(job.total_latency);
-          if (latencyHistory.length > LATENCY_WINDOW_SIZE) latencyHistory.shift();
+      for (const job of jobs) {
+        job.status = 'completed';
+        job.started_at = now;
+        job.completed_at = commitTime;
+        job.ingest_latency = Math.max(0, job.started_at - job.created_at);
+        job.execution_latency = Math.max(0, job.completed_at - job.started_at);
+        job.total_latency = Math.max(0, job.completed_at - job.created_at);
 
-          const typeKey = job.type || 'transaction';
-          if (jobTypeCounters[typeKey] !== undefined) jobTypeCounters[typeKey]++;
-          else jobTypeCounters.transaction++;
+        latencyHistory.push(job.total_latency);
+        if (latencyHistory.length > LATENCY_WINDOW_SIZE) latencyHistory.shift();
 
-          broker.totalProcessed++;
-          queueJobWrite(job);
-        }
-      }, workDelay);
+        const typeKey = job.type || 'transaction';
+        if (jobTypeCounters[typeKey] !== undefined) jobTypeCounters[typeKey]++;
+        else jobTypeCounters.transaction++;
+
+        broker.totalProcessed++;
+        queueJobWrite(job);
+      }
     }
-  }, 100);
-}
-
-function stopInternalWorkers() {
-  isInternalWorkersRunning = false;
-  if (internalWorkersInterval) {
-    clearInterval(internalWorkersInterval);
-    internalWorkersInterval = null;
   }
 }
 
@@ -377,6 +377,7 @@ export {
   queueJobWrite,
   getDbMetrics,
   purgeDatabase,
+  runSimulationStep,
 };
 
 // Re-export getter accessors for mutable state
